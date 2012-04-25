@@ -1,0 +1,9 @@
+# Vim files #
+#############
+*~
+.*.swp
+.*.swo
+
+# Asciidoc output files #
+#########################
+README.html

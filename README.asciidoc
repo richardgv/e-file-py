@@ -1,0 +1,28 @@
+e-file-py README
+================
+Richard Grenville <NOT-PUBLIC@gmail.com>
+
+e-file-py is designed to be a Python replacement of http://files.portagefilelist.de/e-file[e-file] _(however may not yet be an adequent replacement)_, a script of http://luy.li/[bones7456] to query http://www.portagefilelist.de/[Portage File List] without opening a browser, which http://jira.devloop.de/browse/PFL-6[was broken since the PFL update].
+
+Dependency
+----------
+
+- >= Python 3.2
+- Beautiful Soup 4
+- (Optional, but preferred) A Gentoo system :-)
+- (Optional, but highly recommended) Courage to face a million bugs
+
+Usage
+-----
+
+You happen to meet yet another lazy script author... Please ask +e-file-py --help+ for help instead.
+
+FAQ
+---
+
+Why I see so many duplicate packages?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Yet to be written...
+
+
