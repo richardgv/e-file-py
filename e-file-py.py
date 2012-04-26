@@ -1,6 +1,6 @@
 #! /usr/bin/env python3.2
 
-import urllib.request, urllib.parse, bs4, argparse, sys, os, functools
+import urllib.request, urllib.parse, bs4, argparse, sys, os, functools, gzip
 try:
 	import portage
 except ImportError:
@@ -121,10 +121,12 @@ def read_result(mode, filename):
 	report('debug', 'req_data = ' + repr(req_data))
 	req = urllib.request.Request(conf['req_url'], req_data,
 			{ 'User-Agent': urllib.request.URLopener.version
-			+ ' (e-file-py)' })
+			+ ' (e-file-py)', 'Accept-Encoding': 'gzip'})
 	str_raw = ''
 	report('info', 'Sending request to the server...')
 	with urllib.request.urlopen(req) as fraw:
+		if 'gzip' == fraw.getheader('Content-Encoding'):
+			fraw = gzip.GzipFile(fileobj = fraw, mode = 'rb')
 		str_raw = fraw.read(10000000).decode('utf-8')
 	if not str_raw:
 		report_error('fatal', "I got no data from the server!")
