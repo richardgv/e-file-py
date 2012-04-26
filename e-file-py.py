@@ -11,6 +11,8 @@ except ImportError:
 def report(level, msg):
 	if 'fatal' == level:
 		msg = 'FATAL: ' + msg
+	elif 'warning' == level:
+		msg = 'WARNING: ' + msg
 	elif 'info' == level:
 		msg = 'INFO: ' + msg
 	elif 'debug' == level:
@@ -248,8 +250,28 @@ def extra_info(cp, cp_group):
 	report('debug', 'cp_group = ' + repr(cp_group))
 	return cp_group
 
-def filter_result(result):
-	# TODO: Implement filters here
+def filter_result(result, filters):
+	def chkgentoo(filter_name):
+		if 'gentoo' != conf['system']:
+			report('warning', 'filter {} is not available for non-Gentoo'
+					' systems. Filter ignored.'.format(filter_name))
+			return False
+		else:
+			return True
+	
+	# cp-level filters
+	rmlst_cp = set()
+	if 'available' in filters and chkgentoo('available'):
+		for cp, cp_group in result.items():
+			if not cp_group['ver_available']:
+				rmlst_cp.add(cp)
+	if 'installed' in filters and chkgentoo('installed'):
+		for cp, cp_group in result.items():
+			if not cp_group['installed_flag']:
+				rmlst_cp.add(cp)
+	for cp in rmlst_cp:
+		del result[cp]
+	# TODO: Implement more filters here
 	return result
 
 def sort_result(result):
@@ -329,15 +351,23 @@ parser.add_argument('-m', '--minimal', action = 'store_true',
 		'to save time for some specific usages')
 parser.add_argument('-U', '--no-unique', action = 'store_true',
 		help = 'search for all package versions')
+parser_filters = parser.add_argument_group('filters',
+		"Note that some filters don't work on non-Gentoo systems.")
+parser_filters.add_argument('--available', action = 'append_const',
+		dest = 'filters', const = 'available',
+		help = "don't display packages that are not available locally")
+parser_filters.add_argument('--installed', action = 'append_const', 
+		dest = 'filters', const = 'installed',
+		help = "don't display packages that are not installed")
 
 args = parser.parse_args()
-report('debug', 'args = ' + repr(args))
 
 if args.debug:
 	conf['debug'] = True
 	conf['loglevel'] = 'debug'
 if args.loglevel and args.loglevel in LOGLEVELS:
 	conf['loglevel'] = args.loglevel
+report('info', 'args = ' + repr(args))
 # conf['fmtstr'] = args.format
 conf['minimal'] = args.minimal
 if args.no_unique:
@@ -351,7 +381,7 @@ result = parse_result(mode, result)
 if not conf['minimal']:
 	for cp, cp_group in result.items():
 		extra_info(cp, cp_group)
-result = sort_result(filter_result(result))
+result = sort_result(filter_result(result, args.filters))
 for cp, cp_group in result:
 	output_preprocess(cp, cp_group)
 print_result(mode, result, conf['fmtstr'])
