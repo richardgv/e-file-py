@@ -63,7 +63,6 @@ LOGLEVELS = ( 'fatal', 'warning', 'info', 'debug' )
 
 conf = dict(
 		debug = False,
-		separator = ', ',
 		base_url = 'http://www.portagefilelist.de',
 		system = sys_detect(),
 		minimal = False,
@@ -74,22 +73,26 @@ conf = dict(
 			'\033[0;32m     Description:\033[0m\t\t{description}\n'
 			'\033[0;32m     Available versions:\033[0m\t{ver_available_str}\n'
 			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str}\n'
-			'{lvver}',
-			lvcp_sep = '\n',
+			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str}\n'
+			'\033[0;32m     All matched versions:\033[0m\t{ver_all_str}\n'
+			'\n{lvver}',
+			sep_lvcp = '\n',
 			lvver = '\033[0;32m     File found in version:\033[0m\t{ver}{lvver_symbol}\n'
 			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
 			'{lvpath}',
-			lvver_sep = '\033[0;32m     -------------------\033[0m\n',
+			sep_lvver = '\033[0;32m     -------------------\033[0m\n',
 			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{path}\n'
 			'\033[0;32m     File exists locally?:\033[0m\t{lvpath_exists}\n'
 			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
 			'\033[0;32m     File found with USE flag:\033[0m\t{lvpath_use_str}\n'
 			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
-			lvpath_sep = '\n'),
-		sym_ = ' * ',
-		sym_installed = '[I]',
-		sym_upgrade = '[U]',
-		sym_downgrade = '[D]', 
+			sep_lvpath = '\n',
+			sep = ', ',
+			sym_ = ' * ',
+			sym_installed = '[I]',
+			sym_upgrade = '[U]',
+			sym_downgrade = '[D]' 
+			),
 		req_url = 'http://www.portagefilelist.de/site/query/file/?do',
 		req_data = dict(allver = dict(file = '{filename}'),
 			uniq = dict(file = '{filename}', unique_packages = 'on'))
@@ -287,54 +290,79 @@ def sort_result(result):
 			key = sort_key_cp_group)
 	return result
 
-def output_preprocess(cp, cp_group):
+def output_preprocess(cp, cp_group, fmtstr):
+	cp_group['path_all'] = set()
+	cp_group['ver_all'] = set()
 	for ver, ver_group in cp_group['ver_groups']:
+		ver_group['path_all'] = set()
 		for path, path_group in ver_group['path_groups']:
 			path_group['type_str'] = \
-					conf['separator'].join(path_group['type'])
+					fmtstr['sep'].join(path_group['type'])
 			path_group['arch_str'] = \
-					conf['separator'].join(path_group['arch'])
+					fmtstr['sep'].join(path_group['arch'])
 			path_group['use_str'] = \
-					conf['separator'].join(path_group['use'])
-		ver_group['symbol'] = conf['sym_' + ver_group['installed_flag']]
+					fmtstr['sep'].join(path_group['use'])
+			ver_group['path_all'].add(path)
+		ver_group['symbol'] = fmtstr \
+				['sym_' + ver_group['installed_flag']]
+		ver_group['path_all_str'] = \
+				fmtstr['sep'].join(ver_group['path_all'])
+		cp_group['path_all'] |= ver_group['path_all']
+		cp_group['ver_all'].add(ver)
+	cp_group['path_all_str'] = \
+				fmtstr['sep'].join(cp_group['path_all'])
+	cp_group['ver_all_str'] = \
+				fmtstr['sep'].join(cp_group['ver_all'])
 	cp_group['ver_available_str'] = \
-			conf['separator'].join(cp_group['ver_available'])
+			fmtstr['sep'].join(cp_group['ver_available'])
 	cp_group['ver_installed_str'] = \
-			conf['separator'].join(cp_group['ver_installed'])
-	cp_group['symbol'] = conf['sym_' + cp_group['installed_flag']]
+			fmtstr['sep'].join(cp_group['ver_installed'])
+	cp_group['symbol'] = fmtstr['sym_' + cp_group['installed_flag']]
 
 def print_result(mode, result, fmtstr):
 	cp_count = len(result)
+	strdct_lvver = { key: '' for key in fmtstr if key.startswith('lvver_') }
+	strdct_lvver['lvver'] = ''
+	strdct_lvpath = { key: '' for key in fmtstr
+			if key.startswith('lvpath_') }
+	strdct_lvpath['lvpath'] = ''
 	for cp, cp_group in result:
 		cp_kwargs = cp_group.copy()
 		del cp_kwargs['ver_groups']
-		lvver_str = ''
+		for key in strdct_lvver:
+			strdct_lvver[key] = ''
 		ver_count = len(cp_group['ver_groups'])
 		for ver, ver_group in cp_group['ver_groups']:
 			ver_kwargs = { 'lvver_' + key: value for key, value
 					in ver_group.items() if 'path_groups' != key }
 			ver_kwargs.update(cp_kwargs)
 			ver_kwargs['ver'] = ver
-			lvpath_str = ''
+			for key in strdct_lvpath:
+				strdct_lvpath[key] = ''
 			path_count = len(ver_group['path_groups'])
 			for path, path_group in ver_group['path_groups']:
 				path_kwargs = { 'lvpath_' + key: value for key, value
 						in path_group.items() if 'path_groups' != key }
 				path_kwargs.update(ver_kwargs)
 				path_kwargs['path'] = path
-				lvpath_str += fmtstr['lvpath'].format(**path_kwargs)
+				for key in strdct_lvpath:
+					strdct_lvpath[key] += fmtstr[key].format(**path_kwargs)
 				path_count -= 1
 				if path_count:
-					lvpath_str += fmtstr['lvpath_sep']
-			lvver_str += fmtstr['lvver'].format(lvpath = lvpath_str,
-					**ver_kwargs)
+					for key in strdct_lvpath:
+						strdct_lvpath[key] += fmtstr.get('sep_' + key, '')
+			ver_kwargs.update(strdct_lvpath)
+			for key in strdct_lvver:
+				strdct_lvver[key] += fmtstr[key].format(**ver_kwargs)
 			ver_count -= 1
 			if ver_count:
-				lvver_str += fmtstr['lvver_sep']
-		lvcp_str = fmtstr['lvcp'].format(lvver = lvver_str, **cp_kwargs)
+				for key in strdct_lvver:
+					strdct_lvver[key] += fmtstr.get('sep_' + key, '')
+		cp_kwargs.update(strdct_lvver)
+		lvcp_str = fmtstr['lvcp'].format(**cp_kwargs)
 		cp_count -= 1
 		if cp_count:
-			lvcp_str += fmtstr['lvcp_sep']
+			lvcp_str += fmtstr['sep_lvcp']
 		print(lvcp_str, end = '')
 
 # Argument parsing
@@ -354,7 +382,7 @@ parser.add_argument('-U', '--no-unique', action = 'store_true',
 parser_filters = parser.add_argument_group('filters',
 		"Note that some filters don't work on non-Gentoo systems.")
 parser_filters.add_argument('--available', action = 'append_const',
-		dest = 'filters', const = 'available',
+		dest = 'filters', const = 'available', default = [],
 		help = "don't display packages that are not available locally")
 parser_filters.add_argument('--installed', action = 'append_const', 
 		dest = 'filters', const = 'installed',
@@ -383,5 +411,5 @@ if not conf['minimal']:
 		extra_info(cp, cp_group)
 result = sort_result(filter_result(result, args.filters))
 for cp, cp_group in result:
-	output_preprocess(cp, cp_group)
+	output_preprocess(cp, cp_group, conf['fmtstr'])
 print_result(mode, result, conf['fmtstr'])
