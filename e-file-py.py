@@ -545,10 +545,10 @@ parser = argparse.ArgumentParser(description='Python clone of e-file, searching 
 parser.add_argument('filename', help = 'the filename to search')
 parser.add_argument('-d', '--debug', action = 'store_true', 
 		help='enable debugging mode')
-parser.add_argument('--loglevel',
+parser.add_argument('--loglevel', choices = LOGLEVELS, 
 		help='specify output verbosity')
 parser.add_argument('-m', '--minimal', action = 'store_true', 
-		help = 'do not cacalcuate extra properities, '
+		help = 'do not calculate extra proprieties, '
 		'to save time for some specific usages')
 parser.add_argument('-U', '--no-unique', action = 'store_true',
 		help = 'search for all package versions')
@@ -576,7 +576,7 @@ args = parser.parse_args()
 if args.debug:
 	conf['debug'] = True
 	conf['loglevel'] = 'debug'
-if args.loglevel and args.loglevel in LOGLEVELS:
+if args.loglevel:
 	conf['loglevel'] = args.loglevel
 report('debug', 'args = ' + repr(args))
 conf['minimal'] = args.minimal
