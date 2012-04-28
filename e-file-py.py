@@ -20,7 +20,7 @@ def report(level, msg):
 	if LOGLEVELS.index(conf['loglevel']) >= LOGLEVELS.index(level):
 		print(msg, file = sys.stderr)
 	if 'fatal' == level:
-		quit()
+		quit(5)
 	return 0
 
 def dbg_write(id, content):
@@ -61,32 +61,14 @@ def ver_validate(ver):
 
 LOGLEVELS = ( 'fatal', 'warning', 'info', 'debug' )
 
-conf = dict(
-		debug = False,
-		base_url = 'http://www.portagefilelist.de',
-		system = sys_detect(),
-		minimal = False,
-		loglevel = 'warning',
-		fmtstr = dict(
-			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
-			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
-			'\033[0;32m     Description:\033[0m\t\t{description}\n'
-			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
-			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
-			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
-			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n'
-			'\033[0;32m     All matched versions:\033[0m\t{ver_all_str_hl}\n'
-			'\n{lvver}',
+PREDEF_FMTSTR = dict(
+		base = dict(
+			lvcp = '',
+			lvver = '',
+			lvpath = '',
 			sep_lvcp = '\n',
-			lvver = '\033[0;32m     File found in version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
-			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
-			'{lvpath}',
-			sep_lvver = '\033[0;32m     -------------------\033[0m\n',
-			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{lvpath_path_hl}\n'
-			'\033[0;32m     File exists locally?:\033[0m\t{lvpath_exists_str}\n'
-			'\033[0;32m     File found with USE flag:\033[0m\t{lvpath_use_str}\n'
-			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
-			sep_lvpath = '\n',
+			sep_lvver = '',
+			sep_lvpath = '',
 			sep = ', ',
 			sym_ = ' * ',
 			sym_installed = '[I]',
@@ -108,7 +90,70 @@ conf = dict(
 			repr_empty_ver_all = '[ No Information ]',
 			repr_empty_ver = '[ No Information ]',
 			noresult = 'Sorry, no results found.\n',
+		),
+		e_file_uniq = dict(
+			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
+			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
+			'\033[0;32m     Description:\033[0m\t\t{description}\n'
+			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n'
 			),
+		e_file_allver = dict(
+			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
+			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
+			'\033[0;32m     Description:\033[0m\t\t{description}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'\033[0;32m     All matched versions:\033[0m\t{ver_all_str_hl}\n'
+			'\n{lvver}',
+			lvver = '\033[0;32m     File found in version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
+			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
+			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n',
+			sep_lvver = '\n',
+		),
+		full_uniq = dict(
+			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
+			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
+			'\033[0;32m     Description:\033[0m\t\t{description}\n'
+			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n'
+			'\n{lvver}',
+			lvver = '{lvpath}',
+			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{lvpath_path_hl}\n'
+			'\033[0;32m     File found with USE flag:\033[0m\t{lvpath_use_str}\n'
+			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
+			sep_lvpath = '\n',
+		),
+		full_allver = dict(
+			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
+			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
+			'\033[0;32m     Description:\033[0m\t\t{description}\n'
+			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'\n{lvver}',
+			lvver = '\033[0;32m     File found in version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
+			'\033[0;32m     All matched files:\033[0m\t\t{lvver_path_all_str_hl}\n'
+			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
+			'{lvpath}',
+			sep_lvver = '\033[0;32m     -------------------\033[0m\n',
+			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{lvpath_path_hl}\n'
+			'\033[0;32m     File exists locally?:\033[0m\t{lvpath_exists_str}\n'
+			'\033[0;32m     File found with USE flag:\033[0m\t{lvpath_use_str}\n'
+			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
+			sep_lvpath = '\n',
+		),
+)
+conf = dict(
+		debug = False,
+		base_url = 'http://www.portagefilelist.de',
+		system = sys_detect(),
+		minimal = False,
+		loglevel = 'warning',
 		req_url = 'http://www.portagefilelist.de/site/query/file/?do',
 		req_data = dict(allver = dict(file = '{filename}'),
 			uniq = dict(file = '{filename}', unique_packages = 'on'))
@@ -460,8 +505,6 @@ parser = argparse.ArgumentParser(description='Python clone of e-file, searching 
 parser.add_argument('filename', help = 'the filename to search')
 parser.add_argument('-d', '--debug', action = 'store_true', 
 		help='enable debugging mode')
-# parser.add_argument('--format', 
-# 		help='format string')
 parser.add_argument('--loglevel',
 		help='specify output verbosity')
 parser.add_argument('-m', '--minimal', action = 'store_true', 
@@ -477,6 +520,16 @@ parser_filters.add_argument('--available', action = 'append_const',
 parser_filters.add_argument('--installed', action = 'append_const', 
 		dest = 'filters', const = 'installed',
 		help = "don't display packages that are not installed")
+parser_fmtstr = parser.add_argument_group('format strings',
+		"TODO: ...")
+parser_fmtstr.add_argument('--format', nargs = '*', default = [],
+		metavar = 'KEY:VALUE', help='specify a particular item KEY '
+		'as VALUE in format strings')
+parser_fmtstr.add_argument('--fmtstrset',
+		choices = [ key for key in PREDEF_FMTSTR.keys()
+		if 'base' != key ], help='choose a predefined format string set, '
+		'values ending with "_allver" are only usable for -U mode, '
+		'values ending with "_uniq" usually should be used without -U')
 
 args = parser.parse_args()
 
@@ -486,12 +539,31 @@ if args.debug:
 if args.loglevel and args.loglevel in LOGLEVELS:
 	conf['loglevel'] = args.loglevel
 report('debug', 'args = ' + repr(args))
-# conf['fmtstr'] = args.format
 conf['minimal'] = args.minimal
+
 if args.no_unique:
 	mode = 'allver'
 else:
 	mode = 'uniq'
+
+# Use e-file format strings as default temporarily
+fmtstr = 'e_file_' + mode
+# e-file compatibility
+if 'e-file' == os.path.basename(sys.argv[0]):
+	fmtstr = 'e_file_' + mode
+# --fmtstrset handling
+if args.fmtstrset:
+	fmtstr = args.fmtstrset
+conf['fmtstr'] = PREDEF_FMTSTR[fmtstr]
+# --format handling
+for item in args.format:
+	key, value = item.split(':', 1)
+	conf['fmtstr'][key] = value
+# Copy format string set
+for key, value in PREDEF_FMTSTR['base'].items():
+	if key not in conf['fmtstr']:
+		conf['fmtstr'][key] = value
+del PREDEF_FMTSTR
 
 result = read_result(mode, args.filename)
 # result = open('/tmp/output.html', 'r').read()
