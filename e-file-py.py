@@ -107,6 +107,7 @@ conf = dict(
 			repr_empty_ver_available = '[ Not Available ]',
 			repr_empty_ver_all = '[ No Information ]',
 			repr_empty_ver = '[ No Information ]',
+			noresult = 'Sorry, no results found.\n',
 			),
 		req_url = 'http://www.portagefilelist.de/site/query/file/?do',
 		req_data = dict(allver = dict(file = '{filename}'),
@@ -175,6 +176,9 @@ def parse_result(mode, str_raw):
 		ele_td_lst = ele_tr.find_all('td')
 		if not ele_td_lst:
 			continue
+		if 1 == len(ele_td_lst):
+			# No results found
+			break
 		# Handling cp-specific properties
 		cp = ele_td_lst[0].get_text()
 		if cp not in result:
@@ -403,6 +407,9 @@ def output_preprocess(cp, cp_group, fmtstr):
 
 def print_result(mode, result, fmtstr):
 	cp_count = len(result)
+	if not cp_count:
+		print(fmtstr['noresult'], end = '')
+		return 1
 	strdct_lvver = { key: '' for key in fmtstr if key.startswith('lvver_') }
 	strdct_lvver['lvver'] = ''
 	strdct_lvpath = { key: '' for key in fmtstr
@@ -446,6 +453,7 @@ def print_result(mode, result, fmtstr):
 		if cp_count:
 			lvcp_str += fmtstr['sep_lvcp']
 		print(lvcp_str, end = '')
+	return 0
 
 # Argument parsing
 parser = argparse.ArgumentParser(description='Python clone of e-file, searching Gentoo package names with database from portagefilelist.de')
@@ -477,7 +485,7 @@ if args.debug:
 	conf['loglevel'] = 'debug'
 if args.loglevel and args.loglevel in LOGLEVELS:
 	conf['loglevel'] = args.loglevel
-report('info', 'args = ' + repr(args))
+report('debug', 'args = ' + repr(args))
 # conf['fmtstr'] = args.format
 conf['minimal'] = args.minimal
 if args.no_unique:
@@ -495,4 +503,4 @@ result = sort_result(filter_result(result, args.filters))
 if not conf['minimal']:
 	for cp, cp_group in result:
 		output_preprocess(cp, cp_group, conf['fmtstr'])
-print_result(mode, result, conf['fmtstr'])
+quit(print_result(mode, result, conf['fmtstr']))
