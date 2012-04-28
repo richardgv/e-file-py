@@ -93,25 +93,33 @@ PREDEF_FMTSTR = dict(
 		),
 		e_file_uniq = dict(
 			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
+			'{lvcp_sub_aux_if_ver_available}'
+			'{lvcp_sub_inst_if_ver_installed}'
+			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
+			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n',
+			lvcp_sub_aux_if_ver_available = 
 			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
 			'\033[0;32m     Description:\033[0m\t\t{description}\n'
-			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
-			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
-			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
-			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n',
+			lvcp_sub_inst_if_ver_installed = 
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n',
 			),
 		e_file_allver = dict(
 			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
-			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
-			'\033[0;32m     Description:\033[0m\t\t{description}\n'
-			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
-			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'{lvcp_sub_aux_if_ver_available}'
+			'{lvcp_sub_inst_if_ver_installed}'
 			'\033[0;32m     All matched versions:\033[0m\t{ver_all_str_hl}\n'
 			'\n{lvver}',
 			lvver = '\033[0;32m     File found in version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
 			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
 			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n',
 			sep_lvver = '\n',
+			lvcp_sub_aux_if_ver_available = 
+			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
+			'\033[0;32m     Description:\033[0m\t\t{description}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n',
+			lvcp_sub_inst_if_ver_installed = 
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n',
 		),
 		full_uniq = dict(
 			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
@@ -451,14 +459,25 @@ def output_preprocess(cp, cp_group, fmtstr):
 	cp_group['symbol'] = fmtstr['sym_' + cp_group['installed_flag']]
 
 def print_result(mode, result, fmtstr):
+	def ifsearch(key, kwargs):
+		pos = key.find('_if_not_')
+		if -1 != pos:
+			return not bool(kwargs[key[pos + len('_if_not_'):]])
+		pos = key.find('_if_')
+		if -1 != pos:
+			return bool(kwargs[key[pos + len('_if_'):]])
+		return True
+
 	cp_count = len(result)
 	if not cp_count:
 		print(fmtstr['noresult'], end = '')
 		return 1
-	strdct_lvver = { key: '' for key in fmtstr if key.startswith('lvver_') }
+	lvpath_subs = [ key for key in fmtstr if key.startswith('lvpath_sub_') ]
+	lvver_subs = [ key for key in fmtstr if key.startswith('lvver_sub_') ]
+	lvcp_subs = [ key for key in fmtstr if key.startswith('lvcp_sub_') ]
+	strdct_lvver = { key: '' for key in lvver_subs }
 	strdct_lvver['lvver'] = ''
-	strdct_lvpath = { key: '' for key in fmtstr
-			if key.startswith('lvpath_') }
+	strdct_lvpath = { key: '' for key in lvpath_subs }
 	strdct_lvpath['lvpath'] = ''
 	for cp, cp_group in result:
 		cp_kwargs = cp_group.copy()
@@ -479,20 +498,41 @@ def print_result(mode, result, fmtstr):
 						in path_group.items() if 'path_groups' != key }
 				path_kwargs.update(ver_kwargs)
 				path_kwargs['path'] = path
-				for key in strdct_lvpath:
-					strdct_lvpath[key] += fmtstr[key].format(**path_kwargs)
+				strdct_cur = dict()
+				for key in lvpath_subs:
+					if ifsearch(key, path_kwargs):
+						strdct_cur[key] = fmtstr[key].format(**path_kwargs)
+					else:
+						strdct_cur[key] = ''
+					path_kwargs[key] = strdct_cur[key]
+					strdct_lvpath[key] += strdct_cur[key]
+				strdct_lvpath['lvpath'] += \
+						fmtstr['lvpath'].format(**path_kwargs)
 				path_count -= 1
 				if path_count:
 					for key in strdct_lvpath:
 						strdct_lvpath[key] += fmtstr.get('sep_' + key, '')
 			ver_kwargs.update(strdct_lvpath)
-			for key in strdct_lvver:
-				strdct_lvver[key] += fmtstr[key].format(**ver_kwargs)
+			strdct_cur = dict()
+			for key in lvver_subs:
+				if ifsearch(key, ver_kwargs):
+					strdct_cur[key] = fmtstr[key].format(**ver_kwargs)
+				else:
+					strdct_cur[key] = ''
+				ver_kwargs[key] = strdct_cur[key]
+				strdct_lvver[key] += strdct_cur[key]
+			strdct_lvver['lvver'] += \
+					fmtstr['lvver'].format(**ver_kwargs)
 			ver_count -= 1
 			if ver_count:
 				for key in strdct_lvver:
 					strdct_lvver[key] += fmtstr.get('sep_' + key, '')
 		cp_kwargs.update(strdct_lvver)
+		for key in lvcp_subs:
+			if ifsearch(key, cp_kwargs):
+				cp_kwargs[key] = fmtstr[key].format(**cp_kwargs)
+			else:
+				cp_kwargs[key] = ''
 		lvcp_str = fmtstr['lvcp'].format(**cp_kwargs)
 		cp_count -= 1
 		if cp_count:
