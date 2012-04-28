@@ -41,7 +41,7 @@ def commasplit(str_src):
 def plist_getver(plist):
 	return [ portage.versions.cpv_getversion(p) for p in plist ]
 
-def vercmp_func():
+def get_vercmp_func():
 	if 'gentoo' == conf['system']:
 		return portage.versions.vercmp
 	else:
@@ -71,19 +71,19 @@ conf = dict(
 			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
 			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
 			'\033[0;32m     Description:\033[0m\t\t{description}\n'
-			'\033[0;32m     Available versions:\033[0m\t{ver_available_str}\n'
-			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str}\n'
-			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str}\n'
-			'\033[0;32m     All matched versions:\033[0m\t{ver_all_str}\n'
+			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'\033[0;32m     All matched files:\033[0m\t\t{path_all_str_hl}\n'
+			'\033[0;32m     All matched versions:\033[0m\t{ver_all_str_hl}\n'
 			'\n{lvver}',
 			sep_lvcp = '\n',
-			lvver = '\033[0;32m     File found in version:\033[0m\t{ver}{lvver_symbol}\n'
+			lvver = '\033[0;32m     File found in version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
 			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
 			'{lvpath}',
 			sep_lvver = '\033[0;32m     -------------------\033[0m\n',
-			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{path}\n'
-			'\033[0;32m     File exists locally?:\033[0m\t{lvpath_exists}\n'
-			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
+			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{lvpath_path_hl}\n'
+			'\033[0;32m     File exists locally?:\033[0m\t{lvpath_exists_str}\n'
 			'\033[0;32m     File found with USE flag:\033[0m\t{lvpath_use_str}\n'
 			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
 			sep_lvpath = '\n',
@@ -91,30 +91,46 @@ conf = dict(
 			sym_ = ' * ',
 			sym_installed = '[I]',
 			sym_upgrade = '[U]',
-			sym_downgrade = '[D]' 
+			sym_downgrade = '[D]',
+			prefix_installed = '\033[0;32m\033[7m',
+			suffix_installed = '\033[0m',
+			prefix_available = '\033[0;44m',
+			suffix_available = '\033[0m',
+			prefix_matched = '\033[0;44m',
+			suffix_matched = '\033[0m',
+			prefix_exists = '\033[0;32m\033[7m',
+			suffix_exists = '\033[0m',
+			repr_true_exists = 'Exists',
+			repr_false_exists = 'Does not exist',
+			repr_empty_installed = 'Not installed',
+			repr_empty_ver_installed = '[ Not Installed ]',
+			repr_empty_ver_available = '[ Not Available ]',
+			repr_empty_ver_all = '[ No Information ]',
+			repr_empty_ver = '[ No Information ]',
 			),
 		req_url = 'http://www.portagefilelist.de/site/query/file/?do',
 		req_data = dict(allver = dict(file = '{filename}'),
 			uniq = dict(file = '{filename}', unique_packages = 'on'))
 )
-conf['vercmp_func'] = vercmp_func()
-
-# Sort keys
-def sort_key_tuple_first(path_group_tuple):
-	return path_group_tuple[0]
-
-def sort_key_ver_group(ver_group_tuple):
-	return functools.cmp_to_key(conf['vercmp_func'])(ver_group_tuple[0])
-
-sort_key_path_group = sort_key_cp_group = sort_key_tuple_first
-
-sort_key_ver = functools.cmp_to_key(conf['vercmp_func'])
 
 # Global variables
 
 if 'gentoo' == conf['system']:
 	db_port = portage.portdb
 	db_installed = portage.db[portage.root]['vartree'].dbapi
+vercmp_func = get_vercmp_func()
+
+# Sort keys
+def sort_key_tuple_first(path_group_tuple):
+	return path_group_tuple[0]
+
+def sort_key_ver_group(ver_group_tuple):
+	return functools.cmp_to_key(vercmp_func)(ver_group_tuple[0])
+
+sort_key_path_group = sort_key_cp_group = sort_key_tuple_first
+
+sort_key_ver = functools.cmp_to_key(vercmp_func)
+
 
 # Core functions
 
@@ -238,7 +254,7 @@ def extra_info(cp, cp_group):
 				ver_group['installed_flag'] = 'installed'
 				cp_group['installed_flag'] = 'installed'
 			else:
-				if conf['vercmp_func'](ver,
+				if vercmp_func(ver,
 						cp_group['ver_installed'][-1]) > 0:
 					ver_group['installed_flag'] = 'upgrade'
 					if '' == cp_group['installed_flag']:
@@ -291,10 +307,39 @@ def sort_result(result):
 	return result
 
 def output_preprocess(cp, cp_group, fmtstr):
+	def str_hl(string, dec_id):
+		return (fmtstr['prefix_' + dec_id] + string +
+				fmtstr['suffix_' + dec_id])
+	
+	def lst_to_str(lst, sep, match, dec_id):
+		newlst = [ (str_hl(item, dec_id) if item in match else item)
+				for item in lst ]
+		return sep.join(newlst)
+
+	def lst_to_str_double(lst, sep, match, dec_id, match2, dec_id2):
+		newlst = [ (str_hl(item, dec_id) if item in match else 
+				(str_hl(item, dec_id2) if item in match2 else item))
+				for item in lst ]
+		return sep.join(newlst)
+
+	def repr_bool(val, dec_id):
+		if val:
+			return fmtstr['repr_true_' + dec_id]
+		else:
+			return fmtstr['repr_false_' + dec_id]
+
+	def repr_empty_str(val, dec_id):
+		if val:
+			return val
+		else:
+			return fmtstr['repr_empty_' + dec_id]
+
 	cp_group['path_all'] = set()
+	cp_group['path_all_exists'] = set()
 	cp_group['ver_all'] = set()
 	for ver, ver_group in cp_group['ver_groups']:
 		ver_group['path_all'] = set()
+		ver_group['path_all_exists'] = set()
 		for path, path_group in ver_group['path_groups']:
 			path_group['type_str'] = \
 					fmtstr['sep'].join(path_group['type'])
@@ -303,20 +348,57 @@ def output_preprocess(cp, cp_group, fmtstr):
 			path_group['use_str'] = \
 					fmtstr['sep'].join(path_group['use'])
 			ver_group['path_all'].add(path)
+			path_group['exists_str'] = repr_bool(path_group['exists'],
+					'exists')
+			if path_group['exists']:
+				path_group['path_hl'] = str_hl(path, 'exists')
+				ver_group['path_all_exists'].add(path)
+			else:
+				path_group['path_hl'] = path
+		if ver:
+			ver_group['ver_hl'] = ver
+			if ver in cp_group['ver_installed']:
+				ver_group['ver_hl'] = str_hl(ver, 'installed')
+			elif ver in cp_group['ver_available']:
+				ver_group['ver_hl'] = str_hl(ver, 'available')
+		else:
+			ver_group['ver_hl'] = repr_empty_str(ver, 'ver')
+		ver_group['exists_str'] = repr_bool(ver_group['exists'], 'exists')
 		ver_group['symbol'] = fmtstr \
 				['sym_' + ver_group['installed_flag']]
 		ver_group['path_all_str'] = \
 				fmtstr['sep'].join(ver_group['path_all'])
+		ver_group['path_all_str_hl'] = lst_to_str(ver_group['path_all'],
+			fmtstr['sep'], ver_group['path_all_exists'], 'exists')
 		cp_group['path_all'] |= ver_group['path_all']
+		cp_group['path_all_exists'] |= ver_group['path_all_exists']
 		cp_group['ver_all'].add(ver)
+		ver_group['path_all'] = sorted(ver_group['path_all'])
+		ver_group['path_all_exists'] = sorted(ver_group['path_all_exists'])
+	cp_group['path_all'] = sorted(cp_group['path_all'])
+	cp_group['path_all_exists'] = sorted(cp_group['path_all_exists'])
+	cp_group['ver_all'] = sorted(cp_group['ver_all'], key = sort_key_ver)
+	cp_group['exists_str'] = repr_bool(cp_group['exists'], 'exists')
 	cp_group['path_all_str'] = \
 				fmtstr['sep'].join(cp_group['path_all'])
-	cp_group['ver_all_str'] = \
-				fmtstr['sep'].join(cp_group['ver_all'])
+	cp_group['path_all_str_hl'] = lst_to_str(cp_group['path_all'],
+			fmtstr['sep'], cp_group['path_all_exists'], 'exists')
+	cp_group['ver_all_str'] = repr_empty_str(
+			fmtstr['sep'].join(cp_group['ver_all']), 'ver_all')
+	cp_group['ver_all_str_hl'] = repr_empty_str(lst_to_str_double(
+			cp_group['ver_all'], fmtstr['sep'], cp_group['ver_installed'],
+			'installed', cp_group['ver_available'], 'available'), 'ver_all')
 	cp_group['ver_available_str'] = \
 			fmtstr['sep'].join(cp_group['ver_available'])
+	cp_group['ver_available_str_hl'] = repr_empty_str(lst_to_str_double(
+			cp_group['ver_available'], fmtstr['sep'],
+			cp_group['ver_installed'], 'installed',
+			cp_group['ver_all'], 'matched'), 'ver_available')
 	cp_group['ver_installed_str'] = \
 			fmtstr['sep'].join(cp_group['ver_installed'])
+	cp_group['ver_installed_str_hl'] = repr_empty_str(fmtstr['sep'].join(
+			[ str_hl(ver, 'installed') for ver
+			in cp_group['ver_installed'] ]), 'ver_installed')
 	cp_group['symbol'] = fmtstr['sym_' + cp_group['installed_flag']]
 
 def print_result(mode, result, fmtstr):
@@ -410,6 +492,7 @@ if not conf['minimal']:
 	for cp, cp_group in result.items():
 		extra_info(cp, cp_group)
 result = sort_result(filter_result(result, args.filters))
-for cp, cp_group in result:
-	output_preprocess(cp, cp_group, conf['fmtstr'])
+if not conf['minimal']:
+	for cp, cp_group in result:
+		output_preprocess(cp, cp_group, conf['fmtstr'])
 print_result(mode, result, conf['fmtstr'])
