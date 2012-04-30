@@ -42,7 +42,7 @@ def plist_getver(plist):
 	return [ portage.versions.cpv_getversion(p) for p in plist ]
 
 def get_vercmp_func():
-	if 'gentoo' == conf['system']:
+	if 'gentoo' == system:
 		return portage.versions.vercmp
 	else:
 		return (lambda a, b: (a > b) - 0.5)
@@ -52,10 +52,47 @@ def ver_validate(ver):
 	# PFL reports
 	if '.' == ver[-1]:
 		ver = ver[:-1]
-	if 'gentoo' == conf['system'] and not portage.versions.ververify(ver):
+	if 'gentoo' == system and not portage.versions.ververify(ver):
 		report('warning', 'Invalid version number: {}'.format(ver))
 		ver = '0'
 	return ver
+
+def process_cp(arg):
+	if -1 == arg.find('/'):
+		if 'gentoo' != system:
+			report('fatal',
+					'Without Portage API I could not expand package names.')
+		arg = portage.dep_expand(arg, db_port)
+		if arg.startswith('null/'):
+			report('fatal', 'Failed to expand package name to CP.')
+	return tuple(arg.split('/', 1))
+
+def process_cpv(arg):
+	if 'gentoo' != system:
+		report('fatal', 'Without Portage API I could not split CPV.')
+	cp = portage.versions.pkgsplit(arg)[0]
+	ver = arg[len(cp) + 1:]
+	return tuple(process_cp(cp)) + (ver, )
+
+def process_args_cp(args):
+	if 2 < len(args):
+		report('warning', 'I see too many arguments.')
+		args = args[0:2]
+	if 1 == len(args):
+		return process_cp(args[0])
+	else:
+		return tuple(args)
+
+def process_args_cpv(args):
+	if 3 < len(args):
+		report('warning', 'I see too many arguments.')
+		args = args[0:3]
+	if 1 == len(args):
+		return process_cpv(args[0])
+	elif 2 == len(args):
+		return process_cp(args[0]) + (args[1], )
+	else:
+		return tuple(args)
 
 # Default configurations
 
@@ -121,6 +158,15 @@ PREDEF_FMTSTR = dict(
 			lvcp_sub_inst_if_ver_installed = 
 			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n',
 		),
+		e_file_cptov = dict(
+			lvcp = '{lvver}',
+			lvver = '{lvver_ver_hl}\n',
+		),
+		e_file_cpvtof = dict(
+			lvcp = '{lvver}',
+			lvver = '{lvpath}',
+			lvpath = '{lvpath_path_hl}\n',
+		),
 		full_uniq = dict(
 			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
 			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
@@ -155,21 +201,58 @@ PREDEF_FMTSTR = dict(
 			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
 			sep_lvpath = '\n',
 		),
+		full_cptov = dict(
+			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
+			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
+			'\033[0;32m     Description:\033[0m\t\t{description}\n'
+			'\033[0;32m     Link to PFL file list:\033[0m\t{req_url}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'\n{lvver}',
+			lvver = '\033[0;32m     Version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
+			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
+			'{lvpath}',
+			sep_lvver = '\n',
+		),
+		full_cpvtof = dict(
+			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
+			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
+			'\033[0;32m     Description:\033[0m\t\t{description}\n'
+			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
+			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
+			'\n{lvver}',
+			lvver = '\033[0;32m     File found in version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
+			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{req_url}\n'
+			'\n{lvpath}',
+			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{lvpath_path_hl}\n'
+			'\033[0;32m     File exists locally?:\033[0m\t{lvpath_exists_str}\n'
+			'\033[0;32m     File found with USE flag:\033[0m\t{lvpath_use_str}\n'
+			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
+			sep_lvpath = '\n',
+		),
 )
 conf = dict(
 		debug = False,
 		base_url = 'http://www.portagefilelist.de',
-		system = sys_detect(),
 		minimal = False,
 		loglevel = 'warning',
-		req_url = 'http://www.portagefilelist.de/site/query/file/?do',
+		req_url = dict(
+			uniq = 'http://www.portagefilelist.de/site/query/file/?do',
+			allver = 'http://www.portagefilelist.de/site/query/file/?do',
+			cpvtof = 'http://www.portagefilelist.de/site/query/listPackageFiles/?category={c}&package={p}&version={v}&do',
+			cptov = 'http://www.portagefilelist.de/site/query/listPackageVersions/?category={c}&package={p}&do',
+		),
 		req_data = dict(allver = dict(file = '{filename}'),
-			uniq = dict(file = '{filename}', unique_packages = 'on'))
+			uniq = dict(file = '{filename}', unique_packages = 'on'),
+			cpvtof = None,
+			cptov = None,
+		),
 )
 
 # Global variables
 
-if 'gentoo' == conf['system']:
+system = sys_detect()
+if 'gentoo' == system:
 	db_port = portage.portdb
 	db_installed = portage.db[portage.root]['vartree'].dbapi
 vercmp_func = get_vercmp_func()
@@ -185,20 +268,20 @@ sort_key_path_group = sort_key_cp_group = sort_key_tuple_first
 
 sort_key_ver = functools.cmp_to_key(vercmp_func)
 
-
 # Core functions
 
-def read_result(mode, filename):
-	req_data = dict()
-	req_data = urllib.parse.urlencode(
-			{ key: value.format(filename = filename) for key, value
+def read_result(mode, query):
+	query['req_data'] = (urllib.parse.urlencode(
+			{ key: value.format(**query) for key, value
 			in conf['req_data'][mode].items() }).encode('iso8859-1')
-	report('debug', 'req_data = ' + repr(req_data))
-	req = urllib.request.Request(conf['req_url'], req_data,
+			if conf['req_data'][mode] else None)
+	query['req_url'] = conf['req_url'][mode].format(**query)
+	req = urllib.request.Request(query['req_url'], query['req_data'],
 			{ 'User-Agent': urllib.request.URLopener.version
 			+ ' (e-file-py)', 'Accept-Encoding': 'gzip'})
 	str_raw = ''
 	report('info', 'Sending request to the server...')
+	report('debug', repr([query['req_url'], query['req_data']]))
 	with urllib.request.urlopen(req) as fraw:
 		if 'gzip' == fraw.getheader('Content-Encoding'):
 			fraw = gzip.GzipFile(fileobj = fraw, mode = 'rb')
@@ -210,7 +293,69 @@ def read_result(mode, filename):
 	dbg_write('output.html', str_raw)
 	return str_raw
 
-def parse_result(mode, str_raw):
+def parse_result(mode, query, str_raw):
+	def default_cp_get():
+		return query['cp']
+
+	def default_cp():
+		pass
+
+	def default_ver_get():
+		return query['v']
+
+	def default_ver():
+		pass
+
+	def default_path_get():
+		return '/dev/null'
+
+	def default_path():
+		pass
+
+	def ftocpv_cp_get():
+		return ele_td_lst[0].get_text()
+
+	def ftocpv_cp():
+		cp_group['cp_pfl'] = conf['base_url'] + ele_td_lst[0].a['href']
+	
+	def ftocpv_ver_get():
+		if 'uniq' == mode:
+			return ''
+		elif 'allver' == mode:
+			return ver_validate(ele_td_lst[4].get_text())
+
+	def ftocpv_ver():
+		if 'uniq' == mode:
+			ver_group['ver_pfl'] = ''
+		elif 'allver' == mode:
+			ver_group['ver_pfl'] = conf['base_url'] \
+					+ ele_td_lst[4].a['href']
+
+	def ftocpv_path_get():
+		return ele_td_lst[1].get_text()
+
+	def ftocpv_path():
+		path_group['type'] = commasplit(ele_td_lst[2].get_text())
+		path_group['arch'] = commasplit(ele_td_lst[3].get_text())
+		if 'uniq' == mode:
+			path_group['use'] = commasplit(ele_td_lst[4].get_text())
+		elif 'allver' == mode:
+			path_group['use'] = commasplit(ele_td_lst[5].get_text())
+	
+	def cpvtof_path_get():
+		return ele_td_lst[0].get_text()
+
+	def cpvtof_path():
+		path_group['type'] = commasplit(ele_td_lst[1].get_text())
+		path_group['arch'] = commasplit(ele_td_lst[2].get_text())
+		path_group['use'] = commasplit(ele_td_lst[3].get_text())
+
+	def cptov_ver_get():
+		return ele_td_lst[0].get_text()
+
+	def cptov_ver():
+		ver_group['ver_pfl'] = conf['base_url'] + ele_td_lst[0].a['href']
+
 	result = dict()
 	soup = bs4.BeautifulSoup(str_raw, 'html')
 	ele_a_result = soup.find('a', id = 'result')
@@ -221,6 +366,15 @@ def parse_result(mode, str_raw):
 			and 'table' == ele.name.lower() ]
 	if not ele_table:
 		pass
+	parse_func = dict()
+	if mode in ('uniq', 'allver'):
+		prefix = 'ftocpv_'
+	else:
+		prefix = mode + '_'
+	for i in ('cp', 'ver', 'path'):
+		for j in ('', '_get'):
+			parse_func[i + j] = locals().get(prefix + i + j,
+					locals()['default_' + i + j])
 	ele_table = ele_table[0]
 	for ele_tr in ele_table.children:
 		if not (isinstance(ele_tr, bs4.element.Tag)
@@ -229,52 +383,36 @@ def parse_result(mode, str_raw):
 		ele_td_lst = ele_tr.find_all('td')
 		if not ele_td_lst:
 			continue
-		if 1 == len(ele_td_lst):
+		if 'colspan' in ele_td_lst[0].attrs:
 			# No results found
 			break
-		# Handling cp-specific properties
-		cp = ele_td_lst[0].get_text()
+		cp = parse_func['cp_get']()
 		if cp not in result:
 			result[cp] = dict()
 			cp_group = result[cp]
 			cp_group['ver_groups'] = dict()
-			cp_group['c'], cp_group['p'] = cp.split('/')
-			cp_group['cp_pfl'] = conf['base_url'] + ele_td_lst[0].a['href']
+			cp_group['c'], cp_group['p'] = cp.split('/', 1)
+			parse_func['cp']()
 		cp_group = result[cp]
-		# Handling version-specific properties
-		if 'uniq' == mode:
-			ver = ''
-		elif 'allver' == mode:
-			ver = ver_validate(ele_td_lst[4].get_text())
+		ver = parse_func['ver_get']()
 		if ver not in cp_group['ver_groups']:
 			cp_group['ver_groups'][ver] = dict()
 			ver_group = cp_group['ver_groups'][ver]
 			ver_group['path_groups'] = dict()
-			if 'uniq' == mode:
-				ver_group['ver_pfl'] = ''
-			elif 'allver' == mode:
-				ver_group['ver_pfl'] = conf['base_url'] \
-						+ ele_td_lst[4].a['href']
+			parse_func['ver']()
 		ver_group = cp_group['ver_groups'][ver]
-		# Handling path-specific properties
-		path = ele_td_lst[1].get_text()
+		path = parse_func['path_get']()
 		if path not in ver_group['path_groups']:
 			ver_group['path_groups'][path] = dict()
 			path_group = ver_group['path_groups'][path]
-			path_group['type'] = commasplit(ele_td_lst[2].get_text())
-			path_group['arch'] = commasplit(ele_td_lst[3].get_text())
-			if 'uniq' == mode:
-				path_group['use'] = commasplit(ele_td_lst[4].get_text())
-			elif 'allver' == mode:
-				path_group['use'] = commasplit(ele_td_lst[5].get_text())
-		report('debug', 'info = ' + repr(cp_group))
+			parse_func['path']()
 	return result
 
-def extra_info(cp, cp_group):
+def extra_info(mode, query, cp, cp_group):
 	# Get cp-specific information
 	cp_group['exists'] = False
 	cp_group['installed_flag'] = ''
-	if 'gentoo' == conf['system']:
+	if 'gentoo' == system:
 		p_installed = db_installed.match(cp)
 		cp_group['ver_installed'] = plist_getver(p_installed)
 		p_available = db_port.match(cp)
@@ -304,7 +442,7 @@ def extra_info(cp, cp_group):
 			cp_group['exists'] = True
 		# Get ver-specific information
 		ver_group['installed_flag'] = ''
-		if 'gentoo' != conf['system'] or not cp_group['ver_installed']:
+		if 'gentoo' != system or not cp_group['ver_installed']:
 			continue
 		if ver:
 			if ver in cp_group['ver_installed']:
@@ -328,7 +466,7 @@ def extra_info(cp, cp_group):
 
 def filter_result(result, filters):
 	def chkgentoo(filter_name):
-		if 'gentoo' != conf['system']:
+		if 'gentoo' != system:
 			report('warning', 'filter {} is not available for non-Gentoo'
 					' systems. Filter ignored.'.format(filter_name))
 			return False
@@ -399,11 +537,11 @@ def output_preprocess(cp, cp_group, fmtstr):
 		ver_group['path_all_exists'] = set()
 		for path, path_group in ver_group['path_groups']:
 			path_group['type_str'] = \
-					fmtstr['sep'].join(path_group['type'])
+					fmtstr['sep'].join(path_group.get('type', ''))
 			path_group['arch_str'] = \
-					fmtstr['sep'].join(path_group['arch'])
+					fmtstr['sep'].join(path_group.get('arch', ''))
 			path_group['use_str'] = \
-					fmtstr['sep'].join(path_group['use'])
+					fmtstr['sep'].join(path_group.get('use', ''))
 			ver_group['path_all'].add(path)
 			path_group['exists_str'] = repr_bool(path_group['exists'],
 					'exists')
@@ -458,7 +596,7 @@ def output_preprocess(cp, cp_group, fmtstr):
 			in cp_group['ver_installed'] ]), 'ver_installed')
 	cp_group['symbol'] = fmtstr['sym_' + cp_group['installed_flag']]
 
-def print_result(mode, result, fmtstr):
+def print_result(mode, query, result, fmtstr):
 	def ifsearch(key, kwargs):
 		pos = key.find('_if_not_')
 		if -1 != pos:
@@ -482,6 +620,7 @@ def print_result(mode, result, fmtstr):
 	for cp, cp_group in result:
 		cp_kwargs = cp_group.copy()
 		del cp_kwargs['ver_groups']
+		cp_kwargs.update(query)
 		for key in strdct_lvver:
 			strdct_lvver[key] = ''
 		ver_count = len(cp_group['ver_groups'])
@@ -542,16 +681,28 @@ def print_result(mode, result, fmtstr):
 
 # Argument parsing
 parser = argparse.ArgumentParser(description='Python clone of e-file, searching Gentoo package names with database from portagefilelist.de')
-parser.add_argument('filename', help = 'the filename to search')
+parser.add_argument('query', nargs = '+', help = 'the query. '
+		'format for normal mode and -U mode is "filename"; '
+		'acceptable formats for -l mode are "category/packagename-version", "category/packagename version", "packagename-version", "packagename version" or "category packagename version"; '
+		'formats for -L mode are "category/packagename", "category packagename" or "packagename"'
+		)
 parser.add_argument('-d', '--debug', action = 'store_true', 
-		help='enable debugging mode')
+		help = 'enable debugging mode')
 parser.add_argument('--loglevel', choices = LOGLEVELS, 
-		help='specify output verbosity')
+		help = 'specify output verbosity')
 parser.add_argument('-m', '--minimal', action = 'store_true', 
 		help = 'do not calculate extra proprieties, '
 		'to save time for some specific usages')
-parser.add_argument('-U', '--no-unique', action = 'store_true',
+parser_modes = parser.add_mutually_exclusive_group()
+parser_modes.add_argument('-U', '--no-unique', action = 'store_const',
+		dest = 'mode', const = 'allver', default = 'uniq',
 		help = 'search for all package versions')
+parser_modes.add_argument('-l', '--list-files', action = 'store_const',
+		dest = 'mode', const = 'cpvtof',
+		help = 'search for contents of a package-version')
+parser_modes.add_argument('-L', '--list-versions', action = 'store_const',
+		dest = 'mode', const = 'cptov',
+		help = 'search for all versions of a package with a record on PFL')
 parser_filters = parser.add_argument_group('filters',
 		"Note that some filters don't work on non-Gentoo systems.")
 parser_filters.add_argument('--available', action = 'append_const',
@@ -563,13 +714,15 @@ parser_filters.add_argument('--installed', action = 'append_const',
 parser_fmtstr = parser.add_argument_group('format strings',
 		"TODO: ...")
 parser_fmtstr.add_argument('--format', nargs = '*', default = [],
-		metavar = 'KEY:VALUE', help='specify a particular item KEY '
+		metavar = 'KEY:VALUE', help = 'specify a particular item KEY '
 		'as VALUE in format strings')
 parser_fmtstr.add_argument('--fmtstrset',
 		choices = [ key for key in PREDEF_FMTSTR.keys()
-		if 'base' != key ], help='choose a predefined format string set, '
+		if 'base' != key ], help = 'choose a predefined format string set, '
 		'values ending with "_allver" are only usable for -U mode, '
-		'values ending with "_uniq" usually should be used without -U')
+		'values ending with "_uniq" usually should be used without -U, '
+		'values ending with "_cpvtof" should be used with -l, '
+		'values ending with "_cptov" should be used with -L, ')
 
 args = parser.parse_args()
 
@@ -581,11 +734,23 @@ if args.loglevel:
 report('debug', 'args = ' + repr(args))
 conf['minimal'] = args.minimal
 
-if args.no_unique:
-	mode = 'allver'
-else:
-	mode = 'uniq'
+mode = args.mode
 
+# Query processing
+query = dict()
+if 'cpvtof' == mode:
+	query['c'], query['p'], query['v'] = process_args_cpv(args.query)
+	query['cp'] = query['c'] + '/' + query['p']
+	query['cpv'] = query['cp'] + '-' + query['v']
+elif 'cptov' == mode:
+	query['c'], query['p'] = process_args_cp(args.query)
+	query['cp'] = query['c'] + '/' + query['p']
+else:
+	if 1 < len(args.query):
+		report('warning', 'I see too many arguments.')
+	query['filename'] = args.query[0]
+
+# Format string processing
 # Use e-file format strings as default temporarily
 fmtstr = 'e_file_' + mode
 # e-file compatibility
@@ -605,14 +770,14 @@ for key, value in PREDEF_FMTSTR['base'].items():
 		conf['fmtstr'][key] = value
 del PREDEF_FMTSTR
 
-result = read_result(mode, args.filename)
+result = read_result(mode, query)
 # result = open('/tmp/output.html', 'r').read()
-result = parse_result(mode, result)
+result = parse_result(mode, query, result)
 if not conf['minimal']:
 	for cp, cp_group in result.items():
-		extra_info(cp, cp_group)
+		extra_info(mode, query, cp, cp_group)
 result = sort_result(filter_result(result, args.filters))
 if not conf['minimal']:
 	for cp, cp_group in result:
 		output_preprocess(cp, cp_group, conf['fmtstr'])
-quit(print_result(mode, result, conf['fmtstr']))
+quit(print_result(mode, query, result, conf['fmtstr']))
