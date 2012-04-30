@@ -205,7 +205,7 @@ PREDEF_FMTSTR = dict(
 			lvcp = '{symbol} {c}/\033[1m{p}\033[0m\n'
 			'\033[0;32m     Homepage:\033[0m\t\t\t{homepage}\n'
 			'\033[0;32m     Description:\033[0m\t\t{description}\n'
-			'\033[0;32m     Link to PFL file list:\033[0m\t{req_url}\n'
+			'\033[0;32m     Link to PFL file list:\033[0m\t{cp_pfl}\n'
 			'\033[0;32m     Available versions:\033[0m\t{ver_available_str_hl}\n'
 			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
 			'\n{lvver}',
@@ -222,13 +222,22 @@ PREDEF_FMTSTR = dict(
 			'\033[0;32m     Installed versions:\033[0m\t{ver_installed_str_hl}\n'
 			'\n{lvver}',
 			lvver = '\033[0;32m     File found in version:\033[0m\t{lvver_ver_hl}{lvver_symbol}\n'
-			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{req_url}\n'
+			'\033[0;32m     Link to PFL file list of the version:\033[0m\t{lvver_ver_pfl}\n'
 			'\n{lvpath}',
 			lvpath = '\033[0;32m     Matched file:\033[0m\t\t{lvpath_path_hl}\n'
 			'\033[0;32m     File exists locally?:\033[0m\t{lvpath_exists_str}\n'
 			'\033[0;32m     File found with USE flag:\033[0m\t{lvpath_use_str}\n'
 			'\033[0;32m     File found in arch:\033[0m\t{lvpath_arch_str}\n',
 			sep_lvpath = '\n',
+		),
+		raw_uniq = dict(
+				lvcp = '{cp}\n',
+				sep_lvcp = '',
+		),
+		raw_allver = dict(
+				lvcp = '{lvver}',
+				sep_lvcp = '',
+				lvver = '{lvver_cpv}\n',
 		),
 )
 conf = dict(
@@ -342,6 +351,9 @@ def parse_result(mode, query, str_raw):
 		elif 'allver' == mode:
 			path_group['use'] = commasplit(ele_td_lst[5].get_text())
 	
+	def cpvtof_ver():
+		ver_group['ver_pfl'] = query['req_url']
+
 	def cpvtof_path_get():
 		return ele_td_lst[0].get_text()
 
@@ -349,6 +361,9 @@ def parse_result(mode, query, str_raw):
 		path_group['type'] = commasplit(ele_td_lst[1].get_text())
 		path_group['arch'] = commasplit(ele_td_lst[2].get_text())
 		path_group['use'] = commasplit(ele_td_lst[3].get_text())
+
+	def cptov_cp():
+		cp_group['cp_pfl'] = query['req_url']
 
 	def cptov_ver_get():
 		return ele_td_lst[0].get_text()
@@ -399,6 +414,7 @@ def parse_result(mode, query, str_raw):
 			cp_group['ver_groups'][ver] = dict()
 			ver_group = cp_group['ver_groups'][ver]
 			ver_group['path_groups'] = dict()
+			ver_group['cpv'] = cp + '-' + ver
 			parse_func['ver']()
 		ver_group = cp_group['ver_groups'][ver]
 		path = parse_func['path_get']()
@@ -528,6 +544,16 @@ def output_preprocess(cp, cp_group, fmtstr):
 			return val
 		else:
 			return fmtstr['repr_empty_' + dec_id]
+	
+	def ver_hl(string, ver, cp_group, ver_group):
+		if ver:
+			if 'installed' == ver_group['installed_flag']:
+				string = str_hl(string, 'installed')
+			elif ver in cp_group['ver_available']:
+				string = str_hl(string, 'available')
+		else:
+			string = repr_empty_str(string, 'ver')
+		return string
 
 	cp_group['path_all'] = set()
 	cp_group['path_all_exists'] = set()
@@ -550,14 +576,9 @@ def output_preprocess(cp, cp_group, fmtstr):
 				ver_group['path_all_exists'].add(path)
 			else:
 				path_group['path_hl'] = path
-		if ver:
-			ver_group['ver_hl'] = ver
-			if ver in cp_group['ver_installed']:
-				ver_group['ver_hl'] = str_hl(ver, 'installed')
-			elif ver in cp_group['ver_available']:
-				ver_group['ver_hl'] = str_hl(ver, 'available')
-		else:
-			ver_group['ver_hl'] = repr_empty_str(ver, 'ver')
+		ver_group['ver_hl'] = ver_hl(ver, ver, cp_group, ver_group)
+		ver_group['cpv_hl'] = ver_hl(ver_group['cpv'], ver, cp_group, 
+				ver_group)
 		ver_group['exists_str'] = repr_bool(ver_group['exists'], 'exists')
 		ver_group['symbol'] = fmtstr \
 				['sym_' + ver_group['installed_flag']]
@@ -618,9 +639,10 @@ def print_result(mode, query, result, fmtstr):
 	strdct_lvpath = { key: '' for key in lvpath_subs }
 	strdct_lvpath['lvpath'] = ''
 	for cp, cp_group in result:
-		cp_kwargs = cp_group.copy()
+		cp_kwargs = query.copy()
+		cp_kwargs.update(cp_group)
 		del cp_kwargs['ver_groups']
-		cp_kwargs.update(query)
+		cp_kwargs['cp'] = cp
 		for key in strdct_lvver:
 			strdct_lvver[key] = ''
 		ver_count = len(cp_group['ver_groups'])
