@@ -17,12 +17,46 @@ Usage
 
 You happen to meet yet another lazy script author... Please ask +e-file-py --help+ for help instead.
 
+Examples
+~~~~~~~~
+
+- Find packages containing a file named +du+:
+
+  $ python3 e-file-py.py du
+
+- Find packages containing a file named +du+ and print as a raw
+  category/package list:
+
+  $ python3 e-file-py.py --fmtstrset raw_uniq du
+
+- Find packages containing a file named +du+ with detailed version
+  information:
+
+  $ python3 e-file-py.py -U du
+
+- Find packages containing a file named +du+ with detailed version
+  information and print as a raw category/package-version list:
+
+  $ python3 e-file-py.py --fmtstrset raw_allver -U du
+
+- List the contents of +sys-apps/coreutils-8.16+:
+
+  # The following commands work on Gentoo systems only
+  $ python3 e-file-py.py -l sys-apps/coreutils-8.16
+  $ python3 e-file-py.py -l coreutils-8.16
+
+  # The following command works on non-Gentoo systems, too
+  $ python3 e-file-py.py -l sys-apps coreutils 8.16
+
+- List all recorded versions of +sys-apps/coreutils+:
+
+  # The following command works on Gentoo systems only
+  $ python3 e-file-py.py -L coreutils
+
+  # The following command works on non-Gentoo systems, too
+  $ python3 e-file-py.py -L sys-apps/coreutils
+
 FAQ
 ---
 
-Why I see so many duplicate packages?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Yet to be written...
-
-
+To be written...
