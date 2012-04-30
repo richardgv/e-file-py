@@ -1,5 +1,9 @@
 #! /usr/bin/env python3.2
 
+# Richard Grenville
+# https://github.com/richardgv/e-file-py
+# Distributed under the terms of the GNU General Public License v3
+
 import urllib.request, urllib.parse, bs4, argparse, sys, os, functools, gzip
 try:
 	import portage
@@ -238,6 +242,15 @@ PREDEF_FMTSTR = dict(
 				lvcp = '{lvver}',
 				sep_lvcp = '',
 				lvver = '{lvver_cpv}\n',
+		),
+		raw_cptov = dict(
+			lvcp = '{lvver}',
+			lvver = '{ver}\n',
+		),
+		raw_cpvtof = dict(
+			lvcp = '{lvver}',
+			lvver = '{lvpath}',
+			lvpath = '{path}\n',
 		),
 )
 conf = dict(
