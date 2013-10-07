@@ -1,8 +1,8 @@
-#! /usr/bin/env python3.2
+#! /usr/bin/env python3
 
 # Richard Grenville
 # https://github.com/richardgv/e-file-py
-# Distributed under the terms of the GNU General Public License v3
+# Distributed under the terms of the GNU General Public License v2+
 
 import urllib.request, urllib.parse, bs4, argparse, sys, os, functools, gzip
 try:
@@ -12,22 +12,29 @@ except ImportError:
 
 # Helper functions
 
+# http://stackoverflow.com/a/1695250
+def enum_build(*sequential, **named):
+    enums = dict(zip(sequential, range(len(sequential))), **named)
+    return type('Enum', (), enums)
+
 def report(level, msg):
-	if 'fatal' == level:
+	'''Logging function.'''
+	if LOGLEVELS.fatal == level:
 		msg = 'FATAL: ' + msg
-	elif 'warning' == level:
+	elif LOGLEVELS.warning == level:
 		msg = 'WARNING: ' + msg
-	elif 'info' == level:
+	elif LOGLEVELS.info == level:
 		msg = 'INFO: ' + msg
-	elif 'debug' == level:
+	elif LOGLEVELS.debug == level:
 		msg = 'DEBUG: ' + msg
-	if LOGLEVELS.index(conf['loglevel']) >= LOGLEVELS.index(level):
+	if conf['loglevel'] >= level:
 		print(msg, file = sys.stderr)
-	if 'fatal' == level:
+	if LOGLEVELS.fatal == level:
 		quit(5)
 	return 0
 
 def dbg_write(id, content):
+	'''Write some contents to a temporary file for debugging.'''
 	if not conf['debug']:
 		return
 	with open('/tmp/' + id, 'w') as f:
@@ -57,30 +64,30 @@ def ver_validate(ver):
 	if '.' == ver[-1]:
 		ver = ver[:-1]
 	if 'gentoo' == system and not portage.versions.ververify(ver):
-		report('warning', 'Invalid version number: {}'.format(ver))
+		report(LOGLEVELS.warning, 'Invalid version number: {}'.format(ver))
 		ver = '0'
 	return ver
 
 def process_cp(arg):
 	if -1 == arg.find('/'):
 		if 'gentoo' != system:
-			report('fatal',
+			report(LOGLEVELS.fatal,
 					'Without Portage API I could not expand package names.')
 		arg = portage.dep_expand(arg, db_port)
 		if arg.startswith('null/'):
-			report('fatal', 'Failed to expand package name to CP.')
+			report(LOGLEVELS.fatal, 'Failed to expand package name to CP.')
 	return tuple(arg.split('/', 1))
 
 def process_cpv(arg):
 	if 'gentoo' != system:
-		report('fatal', 'Without Portage API I could not split CPV.')
+		report(LOGLEVELS.fatal, 'Without Portage API I could not split CPV.')
 	cp = portage.versions.pkgsplit(arg)[0]
 	ver = arg[len(cp) + 1:]
 	return tuple(process_cp(cp)) + (ver, )
 
 def process_args_cp(args):
 	if 2 < len(args):
-		report('warning', 'I see too many arguments.')
+		report(LOGLEVELS.warning, 'I see too many arguments.')
 		args = args[0:2]
 	if 1 == len(args):
 		return process_cp(args[0])
@@ -89,7 +96,7 @@ def process_args_cp(args):
 
 def process_args_cpv(args):
 	if 3 < len(args):
-		report('warning', 'I see too many arguments.')
+		report(LOGLEVELS.warning, 'I see too many arguments.')
 		args = args[0:3]
 	if 1 == len(args):
 		return process_cpv(args[0])
@@ -100,7 +107,8 @@ def process_args_cpv(args):
 
 # Default configurations
 
-LOGLEVELS = ( 'fatal', 'warning', 'info', 'debug' )
+LOGLEVELS_STRS = ('fatal', 'warning', 'info', 'debug')
+LOGLEVELS = enum_build(*LOGLEVELS_STRS)
 
 PREDEF_FMTSTR = dict(
 		base = dict(
@@ -257,7 +265,7 @@ conf = dict(
 		debug = False,
 		base_url = 'http://www.portagefilelist.de',
 		minimal = False,
-		loglevel = 'warning',
+		loglevel = LOGLEVELS.warning,
 		req_url = dict(
 			uniq = 'http://www.portagefilelist.de/site/query/file/?do',
 			allver = 'http://www.portagefilelist.de/site/query/file/?do',
@@ -302,16 +310,16 @@ def read_result(mode, query):
 			{ 'User-Agent': urllib.request.URLopener.version
 			+ ' (e-file-py)', 'Accept-Encoding': 'gzip'})
 	str_raw = ''
-	report('info', 'Sending request to the server...')
-	report('debug', repr([query['req_url'], query['req_data']]))
+	report(LOGLEVELS.info, 'Sending request to the server...')
+	report(LOGLEVELS.debug, repr([query['req_url'], query['req_data']]))
 	with urllib.request.urlopen(req) as fraw:
 		if 'gzip' == fraw.getheader('Content-Encoding'):
 			fraw = gzip.GzipFile(fileobj = fraw, mode = 'rb')
 		str_raw = fraw.read(10000000).decode('utf-8')
 	if not str_raw:
-		report_error('fatal', "I got no data from the server!")
+		report(LOGLEVELS.fatal, "I got no data from the server!")
 		str_raw = None
-	report('info', 'Result retrieved.')
+	report(LOGLEVELS.info, 'Result retrieved.')
 	dbg_write('output.html', str_raw)
 	return str_raw
 
@@ -490,13 +498,13 @@ def extra_info(mode, query, cp, cp_group):
 		else:
 			ver_group['installed_flag'] = 'installed'
 			cp_group['installed_flag'] = 'installed'
-	report('debug', 'cp_group = ' + repr(cp_group))
+	report(LOGLEVELS.debug, 'cp_group = ' + repr(cp_group))
 	return cp_group
 
 def filter_result(result, filters):
 	def chkgentoo(filter_name):
 		if 'gentoo' != system:
-			report('warning', 'filter {} is not available for non-Gentoo'
+			report(LOGLEVELS.warning, 'filter {} is not available for non-Gentoo'
 					' systems. Filter ignored.'.format(filter_name))
 			return False
 		else:
@@ -723,7 +731,7 @@ parser.add_argument('query', nargs = '+', help = 'the query. '
 		)
 parser.add_argument('-d', '--debug', action = 'store_true', 
 		help = 'enable debugging mode')
-parser.add_argument('--loglevel', choices = LOGLEVELS, 
+parser.add_argument('--loglevel', choices = LOGLEVELS_STRS, 
 		help = 'specify output verbosity')
 parser.add_argument('-m', '--minimal', action = 'store_true', 
 		help = 'do not calculate extra proprieties, '
@@ -763,10 +771,10 @@ args = parser.parse_args()
 
 if args.debug:
 	conf['debug'] = True
-	conf['loglevel'] = 'debug'
+	conf['loglevel'] = LOGLEVELS.debug
 if args.loglevel:
-	conf['loglevel'] = args.loglevel
-report('debug', 'args = ' + repr(args))
+	conf['loglevel'] = getattr(LOGLEVELS, args.loglevel)
+report(LOGLEVELS.debug, 'args = ' + repr(args))
 conf['minimal'] = args.minimal
 
 mode = args.mode
@@ -782,7 +790,7 @@ elif 'cptov' == mode:
 	query['cp'] = query['c'] + '/' + query['p']
 else:
 	if 1 < len(args.query):
-		report('warning', 'I see too many arguments.')
+		report(LOGLEVELS.warning, 'I see too many arguments.')
 	query['filename'] = args.query[0]
 
 # Format string processing
