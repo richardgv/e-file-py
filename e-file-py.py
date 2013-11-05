@@ -4,11 +4,10 @@
 # https://github.com/richardgv/e-file-py
 # Distributed under the terms of the GNU General Public License v2+
 
-import urllib.request, urllib.parse, bs4, argparse, sys, os, functools, gzip
-try:
-	import portage
-except ImportError:
-	pass
+import urllib.request, urllib.parse, argparse, sys, os, functools, gzip
+
+try: import portage
+except ImportError: pass
 
 # Helper functions
 
@@ -109,6 +108,8 @@ def process_args_cpv(args):
 
 LOGLEVELS_STRS = ('fatal', 'warning', 'info', 'debug')
 LOGLEVELS = enum_build(*LOGLEVELS_STRS)
+
+SOURCES = ('pfl_html', 'pfl_json')
 
 PREDEF_FMTSTR = dict(
 		base = dict(
@@ -265,17 +266,35 @@ conf = dict(
 		debug = False,
 		base_url = 'http://www.portagefilelist.de',
 		minimal = False,
+		source = 'pfl_html',
 		loglevel = LOGLEVELS.warning,
 		req_url = dict(
-			uniq = 'http://www.portagefilelist.de/site/query/file/?do',
-			allver = 'http://www.portagefilelist.de/site/query/file/?do',
-			cpvtof = 'http://www.portagefilelist.de/site/query/listPackageFiles/?category={c}&package={p}&version={v}&do',
-			cptov = 'http://www.portagefilelist.de/site/query/listPackageVersions/?category={c}&package={p}&do',
+			pfl_html = dict(
+				uniq = 'http://www.portagefilelist.de/site/query/file/?do',
+				allver = 'http://www.portagefilelist.de/site/query/file/?do',
+				cpvtof = 'http://www.portagefilelist.de/site/query/listPackageFiles/?category={c}&package={p}&version={v}&do',
+				cptov = 'http://www.portagefilelist.de/site/query/listPackageVersions/?category={c}&package={p}&do',
+				),
+			pfl_json = dict(
+				uniq = 'http://www.portagefilelist.de/site/query/robotFile?file={filename}&unique_packages',
+				allver = 'http://www.portagefilelist.de/site/query/robotFile?file={filename}',
+				cpvtof = 'http://www.portagefilelist.de/site/query/robotListPackageFiles?category={c}&package={p}&version={v}',
+				cptov = 'http://www.portagefilelist.de/site/query/robotListPackageVersions?category={c}&package={p}'
+				),
 		),
-		req_data = dict(allver = dict(file = '{filename}'),
-			uniq = dict(file = '{filename}', unique_packages = 'on'),
-			cpvtof = None,
-			cptov = None,
+		req_data = dict(
+			pfl_html = dict(
+				allver = dict(file = '{filename}'),
+				uniq = dict(file = '{filename}', unique_packages = 'on'),
+				cpvtof = None,
+				cptov = None,
+				),
+			pfl_json = dict(
+				allver = None,
+				uniq = None,
+				cpvtof = None,
+				cptov = None,
+				),
 		),
 )
 
@@ -300,12 +319,12 @@ sort_key_ver = functools.cmp_to_key(vercmp_func)
 
 # Core functions
 
-def read_result(mode, query):
+def read_result(source, mode, query):
 	query['req_data'] = (urllib.parse.urlencode(
 			{ key: value.format(**query) for key, value
-			in conf['req_data'][mode].items() }).encode('iso8859-1')
-			if conf['req_data'][mode] else None)
-	query['req_url'] = conf['req_url'][mode].format(**query)
+			in conf['req_data'][source][mode].items() }).encode('iso8859-1')
+			if conf['req_data'][source][mode] else None)
+	query['req_url'] = conf['req_url'][source][mode].format(**query)
 	req = urllib.request.Request(query['req_url'], query['req_data'],
 			{ 'User-Agent': urllib.request.URLopener.version
 			+ ' (e-file-py)', 'Accept-Encoding': 'gzip'})
@@ -323,7 +342,7 @@ def read_result(mode, query):
 	dbg_write('output.html', str_raw)
 	return str_raw
 
-def parse_result(mode, query, str_raw):
+def parse_result(source, mode, query, str_raw):
 	def default_cp_get():
 		return query['cp']
 
@@ -343,85 +362,88 @@ def parse_result(mode, query, str_raw):
 		pass
 
 	def ftocpv_cp_get():
-		return ele_td_lst[0].get_text()
+		if 'pfl_html' == source:
+			return ele_td_lst[0].get_text()
+		elif 'pfl_json' == source:
+			return jele['category'] + '/' + jele['package']
 
 	def ftocpv_cp():
-		cp_group['cp_pfl'] = conf['base_url'] + ele_td_lst[0].a['href']
+		v = ''
+		if 'pfl_html' == source:
+			v = conf['base_url'] + ele_td_lst[0].a['href']
+		cp_group['cp_pfl'] = v
 	
 	def ftocpv_ver_get():
 		if 'uniq' == mode:
 			return ''
 		elif 'allver' == mode:
-			return ver_validate(ele_td_lst[4].get_text())
+			if 'pfl_html' == source:
+				return ver_validate(ele_td_lst[4].get_text())
+			elif 'pfl_json' == source:
+				return ver_validate(jele['version'])
 
 	def ftocpv_ver():
-		if 'uniq' == mode:
-			ver_group['ver_pfl'] = ''
-		elif 'allver' == mode:
-			ver_group['ver_pfl'] = conf['base_url'] \
-					+ ele_td_lst[4].a['href']
+		v = ''
+		if 'pfl_html' == source and 'allver' == mode:
+			v = conf['base_url'] + ele_td_lst[4].a['href']
+		ver_group['ver_pfl'] = v
 
 	def ftocpv_path_get():
-		return ele_td_lst[1].get_text()
+		if 'pfl_html' == source:
+			return ele_td_lst[1].get_text()
+		elif 'pfl_json' == source:
+			return jele['path'] + '/' + jele['file']
 
 	def ftocpv_path():
-		path_group['type'] = commasplit(ele_td_lst[2].get_text())
-		path_group['arch'] = commasplit(ele_td_lst[3].get_text())
-		if 'uniq' == mode:
-			path_group['use'] = commasplit(ele_td_lst[4].get_text())
-		elif 'allver' == mode:
-			path_group['use'] = commasplit(ele_td_lst[5].get_text())
+		if 'pfl_html' == source:
+			path_group['type'] = commasplit(ele_td_lst[2].get_text())
+			path_group['arch'] = commasplit(ele_td_lst[3].get_text())
+			if 'uniq' == mode:
+				path_group['use'] = commasplit(ele_td_lst[4].get_text())
+			elif 'allver' == mode:
+				path_group['use'] = commasplit(ele_td_lst[5].get_text())
+		elif 'pfl_json' == source:
+			path_group['type'] = jele.get('type', list())
+			path_group['arch'] = jele.get('archs', list())
+			path_group['use'] = jele.get('useflags', list())
 	
 	def cpvtof_ver():
 		ver_group['ver_pfl'] = query['req_url']
 
 	def cpvtof_path_get():
-		return ele_td_lst[0].get_text()
+		if 'pfl_html' == source:
+			return ele_td_lst[0].get_text()
+		elif 'pfl_json' == source:
+			return jele['path'] + '/' + jele['file']
 
 	def cpvtof_path():
-		path_group['type'] = commasplit(ele_td_lst[1].get_text())
-		path_group['arch'] = commasplit(ele_td_lst[2].get_text())
-		path_group['use'] = commasplit(ele_td_lst[3].get_text())
+		if 'pfl_html' == source:
+			path_group['type'] = commasplit(ele_td_lst[1].get_text())
+			path_group['arch'] = commasplit(ele_td_lst[2].get_text())
+			path_group['use'] = commasplit(ele_td_lst[3].get_text())
+		elif 'pfl_json' == source:
+			path_group['type'] = jele.get('type', list())
+			path_group['arch'] = jele.get('archs', list())
+			path_group['use'] = jele.get('useflags', list())
 
 	def cptov_cp():
-		cp_group['cp_pfl'] = query['req_url']
+		if 'pfl_html' == source:
+			cp_group['cp_pfl'] = query['req_url']
+		return ''
 
 	def cptov_ver_get():
-		return ele_td_lst[0].get_text()
+		if 'pfl_html' == source:
+			return ele_td_lst[0].get_text()
+		elif 'pfl_json' == source:
+			return jele['version']
 
 	def cptov_ver():
-		ver_group['ver_pfl'] = conf['base_url'] + ele_td_lst[0].a['href']
+		if 'pfl_html' == source:
+			ver_group['ver_pfl'] = conf['base_url'] + ele_td_lst[0].a['href']
+		return ''
 
-	result = dict()
-	soup = bs4.BeautifulSoup(str_raw, 'html')
-	ele_a_result = soup.find('a', id = 'result')
-	if not ele_a_result:
-		pass
-	ele_table = [ ele for ele in ele_a_result.next_siblings
-			if isinstance(ele, bs4.element.Tag)
-			and 'table' == ele.name.lower() ]
-	if not ele_table:
-		pass
-	parse_func = dict()
-	if mode in ('uniq', 'allver'):
-		prefix = 'ftocpv_'
-	else:
-		prefix = mode + '_'
-	for i in ('cp', 'ver', 'path'):
-		for j in ('', '_get'):
-			parse_func[i + j] = locals().get(prefix + i + j,
-					locals()['default_' + i + j])
-	ele_table = ele_table[0]
-	for ele_tr in ele_table.children:
-		if not (isinstance(ele_tr, bs4.element.Tag)
-				and 'tr' == ele_tr.name.lower()):
-			continue
-		ele_td_lst = ele_tr.find_all('td')
-		if not ele_td_lst:
-			continue
-		if 'colspan' in ele_td_lst[0].attrs:
-			# No results found
-			break
+	def parse_ele():
+		nonlocal cp_group, ver_group, path_group
 		cp = parse_func['cp_get']()
 		if cp not in result:
 			result[cp] = dict()
@@ -443,6 +465,52 @@ def parse_result(mode, query, str_raw):
 			ver_group['path_groups'][path] = dict()
 			path_group = ver_group['path_groups'][path]
 			parse_func['path']()
+
+	result = dict()
+	parse_func = dict()
+	cp_group = ver_group = path_group = None
+	if mode in ('uniq', 'allver'):
+		prefix = 'ftocpv_'
+	else:
+		prefix = mode + '_'
+	for i in ('cp', 'ver', 'path'):
+		for j in ('', '_get'):
+			parse_func[i + j] = locals().get(prefix + i + j,
+					locals()['default_' + i + j])
+	if 'pfl_html' == source:
+		import bs4
+		soup = bs4.BeautifulSoup(str_raw, 'html')
+		ele_a_result = soup.find('a', id = 'result')
+		if not ele_a_result:
+			pass
+		ele_table = [ ele for ele in ele_a_result.next_siblings
+				if isinstance(ele, bs4.element.Tag)
+				and 'table' == ele.name.lower() ]
+		if not ele_table:
+			pass
+		ele_table = ele_table[0]
+		for ele_tr in ele_table.children:
+			if not (isinstance(ele_tr, bs4.element.Tag)
+					and 'tr' == ele_tr.name.lower()):
+				continue
+			ele_td_lst = ele_tr.find_all('td')
+			if not ele_td_lst:
+				continue
+			if 'colspan' in ele_td_lst[0].attrs:
+				# No results found
+				break
+			parse_ele()
+	elif 'pfl_json' == source:
+		import json
+		jsonout = json.loads(str_raw)
+		if isinstance(jsonout.get('error'), dict) \
+				and jsonout['error'].get('code'):
+			report(LOGLEVELS.fatal, 'Server failure: '
+					+ repr(jsonout['error'].get('code')) + ': '
+					+ repr(jsonout['error'].get('message')))
+		if isinstance(jsonout.get('result'), list):
+			for jele in jsonout['result']:
+				parse_ele()
 	return result
 
 def extra_info(mode, query, cp, cp_group):
@@ -731,6 +799,8 @@ parser.add_argument('query', nargs = '+', help = 'the query. '
 		)
 parser.add_argument('-d', '--debug', action = 'store_true', 
 		help = 'enable debugging mode')
+parser.add_argument('--source', choices = SOURCES, 
+		help = 'specify info source')
 parser.add_argument('--loglevel', choices = LOGLEVELS_STRS, 
 		help = 'specify output verbosity')
 parser.add_argument('-m', '--minimal', action = 'store_true', 
@@ -775,6 +845,8 @@ if args.debug:
 if args.loglevel:
 	conf['loglevel'] = getattr(LOGLEVELS, args.loglevel)
 report(LOGLEVELS.debug, 'args = ' + repr(args))
+if args.source:
+	conf['source'] = args.source
 conf['minimal'] = args.minimal
 
 mode = args.mode
@@ -813,9 +885,11 @@ for key, value in PREDEF_FMTSTR['base'].items():
 		conf['fmtstr'][key] = value
 del PREDEF_FMTSTR
 
-result = read_result(mode, query)
+result = read_result(conf['source'], mode, query)
 # result = open('/tmp/output.html', 'r').read()
-result = parse_result(mode, query, result)
+result = parse_result(conf['source'], mode, query, result)
+if not result:
+	quit(0)
 if not conf['minimal']:
 	for cp, cp_group in result.items():
 		extra_info(mode, query, cp, cp_group)
